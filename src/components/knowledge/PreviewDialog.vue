@@ -52,7 +52,9 @@ const emit = defineEmits(['update:visible', 'confirm'])
 const dialogVisible = ref(props.visible)
 const form = ref({
   title: '',
-  content: ''
+  content: '',
+  mode: 'full',
+  chunks: null
 })
 
 watch(() => props.visible, (newVal) => {
@@ -67,7 +69,9 @@ watch(() => props.document, (newVal) => {
   if (newVal) {
     form.value = {
       title: newVal.title || '',
-      content: newVal.content || ''
+      content: newVal.content || '',
+      mode: newVal.mode || 'full',
+      chunks: newVal.chunks || null
     }
   }
 }, { deep: true, immediate: true })

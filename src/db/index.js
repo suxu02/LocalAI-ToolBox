@@ -10,7 +10,7 @@ db.version(1).stores({
   // 模板表
   templates: '++id, title, content, variables, params, category, createdAt, updatedAt',
   // 知识库表
-  knowledge: '++id, name, content, mode, chunks, wordCount, createdAt',
+  knowledge: '++id, name, content, mode, wordCount, createdAt',
   // 历史记录表
   history: '++id, title, type, messages, tags, relatedId, createdAt'
 })

@@ -37,7 +37,21 @@
         >
           <template #default="{ node, data }">
             <div class="document-item">
-              <span>{{ data.title }}</span>
+              <div class="document-info">
+                <div class="document-title">
+                  <span>{{ data.title }}</span>
+                  <el-tag
+                    size="small"
+                    :type="data.mode === 'chunk' ? 'primary' : 'info'"
+                    style="margin-left: 8px"
+                  >
+                    {{ data.mode === 'chunk' ? '智能模式' : '全文模式' }}
+                  </el-tag>
+                </div>
+                <div class="document-meta">
+                  {{ data.wordCount || data.content?.length || 0 }} 字
+                </div>
+              </div>
               <div class="document-actions">
                 <el-button
                   type="text"
@@ -124,6 +138,8 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 import db from '../db'
 import { useAI } from '../composables/useAI'
+import { useBM25 } from '../composables/useBM25'
+import { splitTextIntoChunks } from '../utils/chunkUtils'
 import PreviewDialog from '../components/knowledge/PreviewDialog.vue'
 
 const { sendMessage, abort } = useAI()
@@ -219,10 +235,26 @@ const handleFileChange = async (file) => {
       return
     }
 
+    // 添加调试日志
+    console.log(`文档解析完成 - 字数: ${text.length}, 判定模式: ${text.length > 5000 ? '智能模式' : '全文模式'}`)
+
+    // 模式自动识别
+    let mode = 'full'
+    let chunks = null
+    
+    if (text.length > 5000) {
+      // 文档较长，启用智能分块
+      mode = 'chunk'
+      chunks = splitTextIntoChunks(text)
+      ElMessage.info('文档较长，已自动启用智能分块检索')
+    }
+
     // 打开预览弹窗
     previewDocument.value = {
       title: fileName,
-      content: text
+      content: text,
+      mode: mode,
+      chunks: chunks
     }
     previewVisible.value = true
 
@@ -235,11 +267,20 @@ const handleFileChange = async (file) => {
 // 确认入库
 const importDocument = async (documentData) => {
   try {
-    await db.knowledge.add({
-      title: documentData.title,
-      content: documentData.content,
+    // 1. 深拷贝，剥离 Vue Proxy
+    const cleanData = JSON.parse(JSON.stringify(documentData))
+    
+    // 2. 组装最终数据
+    const finalData = {
+      title: cleanData.title,
+      content: cleanData.content,
+      mode: cleanData.mode || 'full',
+      chunks: cleanData.chunks || null, // 确保是纯净对象
+      wordCount: cleanData.content.length,
       createdAt: Date.now()
-    })
+    }
+    
+    await db.knowledge.add(finalData)
     
     await loadDocuments()
     ElMessage.success('文档入库成功')
@@ -293,27 +334,9 @@ const sendQuery = async () => {
 
   const userQuery = query.value.trim()
   const documentContent = selectedDocument.value.content
+  const documentMode = selectedDocument.value.mode || 'full'
+  const documentChunks = selectedDocument.value.chunks
   
-  // 长度校验
-  if (documentContent.length > 20000) {
-    try {
-      await ElMessageBox.confirm(
-        '文档过长，可能消耗较多 Token，是否继续？',
-        '长度警告',
-        {
-          confirmButtonText: '继续',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }
-      )
-    } catch (error) {
-      if (error !== 'cancel') {
-        console.error('确认失败:', error)
-      }
-      return
-    }
-  }
-
   loading.value = true
   
   // 1. 先添加用户消息
@@ -332,8 +355,66 @@ const sendQuery = async () => {
   query.value = '' // 清空输入框
 
   try {
-    // 全文档 Prompt
-    const prompt = `你是一个专业的文档分析助手。请仔细阅读以下【文档内容】，并回答用户的问题。
+    let prompt
+    
+    if (documentMode === 'chunk' && documentChunks) {
+      // 智能分块模式：使用 BM25 算法检索
+      const { search } = useBM25()
+      
+      // 调用 BM25 搜索
+      const relevantChunks = search(userQuery, documentChunks)
+      
+      // --- 新增日志 ---
+      console.log('--- BM25 检索结果 ---')
+      console.log('用户问题:', userQuery)
+      console.log('检索到的分块数量:', relevantChunks.length)
+      console.log('相关片段预览:', relevantChunks.map(c => c.text.substring(0, 50) + '...'))
+      // ------------------
+      
+      // 如果 BM25 没找到相关内容，降级提示
+      if (!relevantChunks || relevantChunks.length === 0) {
+        messages.value[messages.value.length - 1].content = "抱歉，我在文档中没有找到与您问题相关的内容。"
+        loading.value = false
+        return
+      }
+      
+      // 拼接相关分块内容
+      const relevantContent = relevantChunks.map(chunk => chunk.text).join('\n\n')
+      
+      prompt = `你是一个专业的文档分析助手。请仔细阅读以下【文档内容】，并回答用户的问题。
+要求：回答要准确、条理清晰。如果文档中没有相关信息，请明确告知。
+
+【文档内容】：
+${relevantContent}
+
+【用户问题】：
+${userQuery}`
+    } else {
+      // 全文模式
+      // 长度校验
+      if (documentContent.length > 20000) {
+        try {
+          await ElMessageBox.confirm(
+            '文档过长，可能消耗较多 Token，是否继续？',
+            '长度警告',
+            {
+              confirmButtonText: '继续',
+              cancelButtonText: '取消',
+              type: 'warning'
+            }
+          )
+        } catch (error) {
+          if (error !== 'cancel') {
+            console.error('确认失败:', error)
+          }
+          loading.value = false
+          messages.value.pop() // 移除占位消息
+          messages.value.pop() // 移除用户消息
+          return
+        }
+      }
+      
+      prompt = `你是一个专业的文档分析助手。请仔细阅读以下【文档内容】，并回答用户的问题。
 要求：回答要准确、条理清晰。如果文档中没有相关信息，请明确告知。
 
 【文档内容】：
@@ -341,6 +422,7 @@ ${documentContent}
 
 【用户问题】：
 ${userQuery}`
+    }
 
     await sendMessage([{ role: 'user', content: prompt }], {
       temperature: 0.7,
@@ -459,6 +541,32 @@ const renderMarkdown = (text) => {
   align-items: center;
   padding: 10px;
   cursor: pointer;
+}
+
+.document-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.document-title {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.document-title span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-meta {
+  font-size: 12px;
+  color: #909399;
 }
 
 .document-item:hover {
