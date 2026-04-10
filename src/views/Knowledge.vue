@@ -535,13 +535,28 @@ const renderMarkdown = (text) => {
   flex-shrink: 0;
 }
 
+/* 强制选中 Tree 组件内部的节点内容 */
+:deep(.el-tree-node__content) {
+  height: auto !important; /* 允许高度自适应 */
+  padding: 10px 0; /* 增加上下内边距 */
+}
+
+/* 列表项样式增强 */
 .document-item {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   padding: 12px 10px;
-  cursor: pointer;
-  margin-bottom: 4px;
+  margin-bottom: 12px; /* 增加底部外边距 */
+  background-color: #ffffff; /* 加白色背景，形成独立卡片感 */
+  border-bottom: 1px solid #f0f0f0; /* 加一条淡色分割线 */
+  border-radius: 4px; /* 稍微加点圆角 */
+}
+
+/* 移除最后一项的分割线 */
+.document-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
 }
 
 .document-info {
@@ -565,9 +580,12 @@ const renderMarkdown = (text) => {
   white-space: nowrap;
 }
 
+/* 确保字数信息有足够的空间 */
 .document-meta {
   font-size: 12px;
   color: #909399;
+  margin-top: 6px; /* 增加与标题的间距 */
+  line-height: 1.5;
 }
 
 .document-item:hover {
