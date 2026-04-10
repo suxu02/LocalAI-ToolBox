@@ -46,7 +46,7 @@ const initDefaultData = async () => {
     if (knowledgeCount === 0) {
       // 写入预置文档
       await db.knowledge.add({
-        name: 'LocalAI-ToolBox 快速上手指南.md',
+        title: 'LocalAI-ToolBox 快速上手指南.md',
         content: '# LocalAI-ToolBox 快速上手指南\n\n欢迎使用 LocalAI-ToolBox！这是一个本地运行的 AI 个人效率工具箱，帮你提升工作效率。\n\n## 快速上手三步\n\n### 1. 配置 API Key\n- 点击左侧导航栏的「设置」\n- 输入 DeepSeek API Key\n- 点击「保存并测试」验证连接\n\n### 2. 使用提示词工坊\n- 点击左侧导航栏的「提示词工坊」\n- 选择「公文生成器」模板\n- 填写模板变量，点击「生成」\n\n### 3. 上传知识库文档\n- 点击左侧导航栏的「本地知识库」\n- 上传 PDF 或 Word 文档\n- 解析完成后，即可基于文档内容提问\n\n## 注意事项\n- 数据仅存储在本地浏览器中\n- 定期使用「设置」页面的「导出数据包」功能备份数据\n- 支持的文档格式：PDF（文字版）、Word（.docx）',
         wordCount: 200,
         mode: 'full',

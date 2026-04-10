@@ -538,9 +538,10 @@ const renderMarkdown = (text) => {
 .document-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 10px;
+  align-items: flex-start;
+  padding: 12px 10px;
   cursor: pointer;
+  margin-bottom: 4px;
 }
 
 .document-info {
